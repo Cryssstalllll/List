@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>行李清單</title>
+<style>
+:root {
+  --bg:#f6f6f3; --card:#fff; --text:#2e2e30; --muted:#8a8a8f;
+  --accent:#e8b72f; --blue:#0a84ff; --red:#e0524d; --line:#ececea;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:calc(28px + env(safe-area-inset-top)) 16px calc(130px + env(safe-area-inset-bottom))}
+.header{display:flex;justify-content:space-between;align-items:end;gap:12px}
+h1{font-size:40px;line-height:1;margin:0 0 18px;font-weight:850;letter-spacing:-1px}
+#count{font-size:14px;color:var(--muted);padding-bottom:20px;white-space:nowrap}
+.toolbar{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.toolbar button,.addBtn,.saveBtn,.cancelBtn{
+  border:0;border-radius:16px;padding:14px 12px;font-size:17px;font-weight:800;background:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.06)
+}
+#resetBtn{color:var(--red)} #filterBtn{color:var(--blue)} #filterBtn.active{background:#222;color:#fff}
+.addBtn{width:100%;margin-bottom:14px;background:#222;color:#fff}
+.card{background:var(--card);border-radius:20px;overflow:hidden;box-shadow:0 3px 18px rgba(0,0,0,.04)}
+.item{display:flex;align-items:center;gap:12px;min-height:60px;padding:12px 12px 12px 16px;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none} .item.sub{padding-left:48px;background:#fcfcfb}
+.item.hidden{display:none}
+.check{appearance:none;-webkit-appearance:none;width:29px;height:29px;border-radius:50%;border:3px solid #c9c9cd;background:white;display:grid;place-items:center;flex:0 0 auto}
+.check:checked{background:var(--accent);border-color:var(--accent)} .check:checked::after{content:"✓";color:#fff;font-size:20px;font-weight:900;transform:translateY(-1px)}
+.name{flex:1;font-size:20px;line-height:1.35;word-break:break-word} .sub .name{font-size:18px}
+.actions{display:flex;gap:6px;flex:none}
+.iconBtn{width:40px;height:40px;border:0;border-radius:12px;background:#f1f1ef;font-size:18px}
+.deleteBtn{color:var(--red)}
+.note{font-size:13px;color:var(--muted);text-align:center;margin:14px 6px}
+.footer{position:fixed;left:0;right:0;bottom:0;background:rgba(246,246,243,.93);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);border-top:1px solid rgba(0,0,0,.05);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
+.footer button{display:block;width:min(728px,100%);margin:auto;border:0;border-radius:16px;padding:15px;font-size:19px;font-weight:850;background:var(--accent);color:#fff}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.32);display:none;align-items:flex-end;justify-content:center;padding:0;z-index:20}
+.modal.open{display:flex}
+.sheet{width:min(760px,100%);background:#fff;border-radius:24px 24px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -10px 30px rgba(0,0,0,.12)}
+.sheet h2{margin:0 0 14px;font-size:24px}
+.field{margin:12px 0}
+.field label{display:block;font-size:14px;color:var(--muted);margin:0 0 6px}
+.field input[type=text]{width:100%;font-size:18px;padding:13px 14px;border:1px solid #d9d9dc;border-radius:14px;outline:none}
+.levelRow{display:flex;align-items:center;gap:10px;font-size:17px}
+.levelRow input{width:22px;height:22px}
+.modalBtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.cancelBtn{background:#eee;color:#333} .saveBtn{background:var(--blue);color:#fff}
+#jsWarning{background:#fff2cc;color:#8a6412;padding:12px 14px;border-radius:14px;margin-bottom:12px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="jsWarning">如果你現在是在 iPhone 的「檔案預覽」畫面，按鈕可能不會動。請用 Safari 開啟這個 HTML，下面功能才會啟用。</div>
+  <div class="header"><h1>行李清單</h1><div id="count">—</div></div>
+
+  <div class="toolbar">
+    <button id="resetBtn" type="button">全部取消勾選</button>
+    <button id="filterBtn" type="button">只看未完成</button>
+  </div>
+  <button class="addBtn" id="addBtn" type="button">＋ 新增行李項目</button>
+
+  <div class="card" id="list"></div>
+  <div class="note">勾選、修改、新增與刪除後，都會自動儲存在這個瀏覽器。</div>
+</div>
+
+<div class="footer"><button id="allBtn" type="button">全部勾選</button></div>
+
+<div class="modal" id="modal" aria-hidden="true">
+  <div class="sheet">
+    <h2 id="modalTitle">新增項目</h2>
+    <div class="field">
+      <label for="nameInput">項目名稱</label>
+      <input id="nameInput" type="text" maxlength="60" placeholder="例如：充電器">
+    </div>
+    <div class="field levelRow">
+      <input id="subInput" type="checkbox">
+      <label for="subInput" style="margin:0;color:var(--text)">設為縮排子項目</label>
+    </div>
+    <div class="modalBtns">
+      <button class="cancelBtn" id="cancelBtn" type="button">取消</button>
+      <button class="saveBtn" id="saveBtn" type="button">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const DEFAULT_ITEMS = [{"id": 1, "name": "美金", "checked": true, "level": 0}, {"id": 2, "name": "eSIM 卡", "checked": true, "level": 0}, {"id": 3, "name": "護照", "checked": true, "level": 0}, {"id": 4, "name": "iPad", "checked": true, "level": 0}, {"id": 5, "name": "身分證", "checked": true, "level": 0}, {"id": 6, "name": "錢包", "checked": true, "level": 0}, {"id": 7, "name": "胃藥", "checked": true, "level": 0}, {"id": 8, "name": "皮膚藥", "checked": true, "level": 0}, {"id": 9, "name": "防曬外套", "checked": false, "level": 0}, {"id": 10, "name": "磁吸支架", "checked": true, "level": 0}, {"id": 11, "name": "漢頓路跑衣", "checked": true, "level": 0}, {"id": 12, "name": "防曬", "checked": true, "level": 0}, {"id": 13, "name": "中藥", "checked": true, "level": 0}, {"id": 14, "name": "轉接頭", "checked": true, "level": 0}, {"id": 15, "name": "娃娃", "checked": true, "level": 0}, {"id": 16, "name": "拖鞋", "checked": true, "level": 0}, {"id": 17, "name": "鋪棉外套", "checked": true, "level": 0}, {"id": 18, "name": "護髮油", "checked": true, "level": 0}, {"id": 19, "name": "乳液", "checked": true, "level": 0}, {"id": 20, "name": "口罩", "checked": true, "level": 0}, {"id": 21, "name": "AirPods", "checked": true, "level": 0}, {"id": 22, "name": "衛生棉", "checked": true, "level": 0}, {"id": 23, "name": "棉條", "checked": true, "level": 0}, {"id": 24, "name": "泡麵🍜", "checked": true, "level": 0}, {"id": 25, "name": "電捲棒", "checked": false, "level": 0}, {"id": 26, "name": "筷子湯匙", "checked": true, "level": 0}, {"id": 27, "name": "衣架", "checked": true, "level": 0}, {"id": 28, "name": "黑色刷毛褲", "checked": true, "level": 0}, {"id": 29, "name": "化妝品", "checked": true, "level": 0}, {"id": 30, "name": "化妝水", "checked": true, "level": 0}, {"id": 31, "name": "筆電💻", "checked": true, "level": 0}, {"id": 32, "name": "刷具", "checked": true, "level": 0}, {"id": 33, "name": "Type-C 充電線", "checked": false, "level": 0}, {"id": 34, "name": "Watch 充電線", "checked": true, "level": 0}, {"id": 35, "name": "行動電源", "checked": true, "level": 0}, {"id": 36, "name": "塑型眼鏡", "checked": true, "level": 0}, {"id": 37, "name": "洗臉", "checked": true, "level": 0}, {"id": 38, "name": "香皂🧼", "checked": true, "level": 0}, {"id": 39, "name": "塑膠袋", "checked": true, "level": 0}, {"id": 40, "name": "綁頭髮", "checked": false, "level": 0}, {"id": 41, "name": "雨傘", "checked": true, "level": 0}, {"id": 42, "name": "毛巾 × 2", "checked": true, "level": 0}, {"id": 43, "name": "睡褲", "checked": true, "level": 0}, {"id": 44, "name": "瀏海貼", "checked": true, "level": 0}, {"id": 45, "name": "卸妝", "checked": true, "level": 0}, {"id": 46, "name": "梳子", "checked": true, "level": 0}, {"id": 47, "name": "牙線", "checked": true, "level": 0}, {"id": 48, "name": "洗髮精沐浴乳", "checked": true, "level": 0}, {"id": 49, "name": "潤髮", "checked": true, "level": 0}, {"id": 50, "name": "項鍊", "checked": true, "level": 0}, {"id": 51, "name": "牙刷", "checked": true, "level": 0}, {"id": 52, "name": "酵素", "checked": true, "level": 0}, {"id": 53, "name": "牙膏", "checked": true, "level": 0}, {"id": 54, "name": "化妝棉", "checked": true, "level": 0}, {"id": 55, "name": "棉花棒", "checked": true, "level": 0}, {"id": 56, "name": "卸睫毛膏", "checked": true, "level": 0}, {"id": 57, "name": "襪子", "checked": true, "level": 0}, {"id": 58, "name": "內衣褲", "checked": true, "level": 0}, {"id": 59, "name": "拍立得", "checked": true, "level": 0}, {"id": 60, "name": "蝴蝶結髮夾", "checked": true, "level": 0}, {"id": 61, "name": "藥包", "checked": true, "level": 0}, {"id": 62, "name": "精華液", "checked": true, "level": 0}, {"id": 63, "name": "隱眼", "checked": true, "level": 0}, {"id": 64, "name": "口紅", "checked": true, "level": 0}, {"id": 65, "name": "假睫毛", "checked": true, "level": 0}, {"id": 66, "name": "維持器", "checked": true, "level": 0}, {"id": 67, "name": "小電風扇", "checked": false, "level": 0}, {"id": 68, "name": "潛水", "checked": true, "level": 0}, {"id": 69, "name": "墨鏡", "checked": false, "level": 1}, {"id": 70, "name": "泳衣", "checked": true, "level": 1}, {"id": 71, "name": "潛水帽", "checked": true, "level": 1}, {"id": 72, "name": "潛水手套", "checked": true, "level": 1}];
+  const KEY = "packing-list-v3";
+  let items;
+  let filterUnchecked = false;
+  let editingId = null;
+
+  const list = document.getElementById("list");
+  const count = document.getElementById("count");
+  const resetBtn = document.getElementById("resetBtn");
+  const allBtn = document.getElementById("allBtn");
+  const filterBtn = document.getElementById("filterBtn");
+  const addBtn = document.getElementById("addBtn");
+  const modal = document.getElementById("modal");
+  const modalTitle = document.getElementById("modalTitle");
+  const nameInput = document.getElementById("nameInput");
+  const subInput = document.getElementById("subInput");
+  const cancelBtn = document.getElementById("cancelBtn");
+  const saveBtn = document.getElementById("saveBtn");
+  const jsWarning = document.getElementById("jsWarning");
+
+  jsWarning.style.display = "none";
+
+  function cloneDefaults() {
+    return DEFAULT_ITEMS.map(x => ({...x}));
+  }
+
+  try {
+    const saved = localStorage.getItem(KEY);
+    items = saved ? JSON.parse(saved) : cloneDefaults();
+    if (!Array.isArray(items)) items = cloneDefaults();
+  } catch (e) {
+    items = cloneDefaults();
+  }
+
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(items)); } catch(e) {}
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[c]);
+  }
+
+  function render() {
+    list.innerHTML = "";
+    items.forEach(item => {
+      if (filterUnchecked && item.checked) return;
+
+      const row = document.createElement("div");
+      row.className = "item" + (item.level ? " sub" : "");
+
+      const cb = document.createElement("input");
+      cb.className = "check";
+      cb.type = "checkbox";
+      cb.checked = !!item.checked;
+      cb.addEventListener("change", () => {
+        item.checked = cb.checked;
+        persist();
+        render();
+      });
+
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = item.name;
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      const edit = document.createElement("button");
+      edit.className = "iconBtn";
+      edit.type = "button";
+      edit.textContent = "✎";
+      edit.setAttribute("aria-label", "修改 " + item.name);
+      edit.addEventListener("click", () => openEdit(item.id));
+
+      const del = document.createElement("button");
+      del.className = "iconBtn deleteBtn";
+      del.type = "button";
+      del.textContent = "🗑";
+      del.setAttribute("aria-label", "刪除 " + item.name);
+      del.addEventListener("click", () => {
+        if (confirm('確定要刪除「' + item.name + '」嗎？')) {
+          items = items.filter(x => x.id !== item.id);
+          persist();
+          render();
+        }
+      });
+
+      actions.append(edit, del);
+      row.append(cb, name, actions);
+      list.appendChild(row);
+    });
+
+    const done = items.filter(x => x.checked).length;
+    count.textContent = done + " / " + items.length + " 已完成";
+    filterBtn.textContent = filterUnchecked ? "顯示全部" : "只看未完成";
+    filterBtn.classList.toggle("active", filterUnchecked);
+  }
+
+  function openAdd() {
+    editingId = null;
+    modalTitle.textContent = "新增項目";
+    nameInput.value = "";
+    subInput.checked = false;
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden","false");
+    setTimeout(() => nameInput.focus(), 100);
+  }
+
+  function openEdit(id) {
+    const item = items.find(x => x.id === id);
+    if (!item) return;
+    editingId = id;
+    modalTitle.textContent = "修改項目";
+    nameInput.value = item.name;
+    subInput.checked = !!item.level;
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden","false");
+    setTimeout(() => nameInput.focus(), 100);
+  }
+
+  function closeModal() {
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden","true");
+  }
+
+  function saveModal() {
+    const name = nameInput.value.trim();
+    if (!name) {
+      alert("請輸入項目名稱");
+      return;
+    }
+    if (editingId == null) {
+      const nextId = items.length ? Math.max(...items.map(x => Number(x.id)||0)) + 1 : 1;
+      items.push({id:nextId, name:name, checked:false, level:subInput.checked ? 1 : 0});
+    } else {
+      const item = items.find(x => x.id === editingId);
+      if (item) {
+        item.name = name;
+        item.level = subInput.checked ? 1 : 0;
+      }
+    }
+    persist();
+    closeModal();
+    render();
+  }
+
+  resetBtn.addEventListener("click", () => {
+    if (!confirm("確定要取消所有勾選嗎？")) return;
+    items.forEach(x => x.checked = false);
+    persist();
+    render();
+  });
+
+  allBtn.addEventListener("click", () => {
+    items.forEach(x => x.checked = true);
+    persist();
+    render();
+  });
+
+  filterBtn.addEventListener("click", () => {
+    filterUnchecked = !filterUnchecked;
+    render();
+  });
+
+  addBtn.addEventListener("click", openAdd);
+  cancelBtn.addEventListener("click", closeModal);
+  saveBtn.addEventListener("click", saveModal);
+
+  modal.addEventListener("click", e => {
+    if (e.target === modal) closeModal();
+  });
+
+  nameInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") saveModal();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
